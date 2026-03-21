@@ -1,33 +1,44 @@
-import { Bot, webhookCallback } from "https://deno.land/x/grammy/mod.ts";
-import { GoogleGenerativeAI } from "npm:@google/generative-ai";
+import { Bot } from "https://deno.land/x/grammy@v1.21.1/mod.ts";
+import { GoogleGenerativeAI } from "npm:@google/generative-ai@0.3.0";
+import "https://deno.land/std@0.220.1/dotenv/load.ts";
 
-const token = Deno.env.get("8628665706:AAGaQpJE--Qh17zl5oWX69p29qAuCTE0uOs");
-const genAI = new GoogleGenerativeAI(Deno.env.get("AIzaSyAhH_7EFGEuXkC_yTAUrQpMI2076k9cTjQ") || "");
+// 1. Setup Environment Variables
+const telegramToken = Deno.env.get("TELEGRAM_TOKEN");
+const geminiKey = Deno.env.get("GEMINI_API_KEY");
 
-if (!token) throw new Error("TELEGRAM_TOKEN is missing!");
+if (!telegramToken || !geminiKey) {
+  throw new Error("Missing environment variables!");
+}
 
-const bot = new Bot(token);
+// 2. Initialize Gemini
+const genAI = new GoogleGenerativeAI(geminiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+// 3. Initialize Telegram Bot
+const bot = new Bot(telegramToken);
+
+// Handle /start command
+bot.command("start", (ctx) => ctx.reply("I'm powered by Gemini! Ask me anything."));
+
+// Handle text messages
 bot.on("message:text", async (ctx) => {
-  const result = await model.generateContent(ctx.message.text);
-  await ctx.reply(result.response.text());
-});
+  const prompt = ctx.message.text;
 
-// CRITICAL: Use Deno.serve to handle requests from Telegram
-const handleUpdate = webhookCallback(bot, "std/http");
+  // Let the user know the bot is "typing"
+  await ctx.replyWithChatAction("typing");
 
-Deno.serve(async (req) => {
-  if (req.method === "POST") {
-    const url = new URL(req.url);
-    // Security check: ensure the request is actually from Telegram
-    if (url.pathname.slice(1) === bot.token) {
-      try {
-        return await handleUpdate(req);
-      } catch (err) {
-        console.error(err);
-      }
-    }
+  try {
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    await ctx.reply(text);
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    await ctx.reply("Sorry, I encountered an error processing your request.");
   }
-  return new Response("Bot is running!");
 });
+
+// 4. Start the Bot
+console.log("Bot is running...");
+bot.start();
