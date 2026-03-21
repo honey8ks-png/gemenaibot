@@ -1,5 +1,5 @@
-const TELEGRAM_TOKEN = "8228552512:AAH7NQZR87tMPj9FZsw1yptfV_8x0eOEe0c";
-const GEMINI_API_KEY = "AIzaSyC8CeS_30h8-OpqinWV-8JdENv__3Lb_xA";
+const TELEGRAM_TOKEN = "8628665706:AAGaQpJE--Qh17zl5oWX69p29qAuCTE0uOs";
+const GEMINI_API_KEY = "AIzaSyAhH_7EFGEuXkC_yTAUrQpMI2076k9cTjQ";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
