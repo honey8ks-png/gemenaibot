@@ -1,34 +1,23 @@
-import { Bot } from "https://deno.land/x/grammy@v1.21.1/mod.ts";
+import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.21.1/mod.ts";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai@0.3.0";
-import "https://deno.land/std@0.220.1/dotenv/load.ts";
 
-// 1. Setup Environment Variables
-const telegramToken = Deno.env.get("TELEGRAM_TOKEN");
-const geminiKey = Deno.env.get("GEMINI_API_KEY");
+// 1. Setup API Keys (Set these in Deno Deploy Environment Variables)
+const TELEGRAM_TOKEN = Deno.env.get("TELEGRAM_TOKEN") || "";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
 
-if (!telegramToken || !geminiKey) {
-  throw new Error("Missing environment variables!");
-}
-
-// 2. Initialize Gemini
-const genAI = new GoogleGenerativeAI(geminiKey);
+const bot = new Bot(TELEGRAM_TOKEN);
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// 3. Initialize Telegram Bot
-const bot = new Bot(telegramToken);
+// 2. Bot Logic
+bot.command("start", (ctx) => ctx.reply("Hi! I'm Gemini AI. Send me a message!"));
 
-// Handle /start command
-bot.command("start", (ctx) => ctx.reply("I'm powered by Gemini! Ask me anything."));
-
-// Handle text messages
 bot.on("message:text", async (ctx) => {
-  const prompt = ctx.message.text;
-
-  // Let the user know the bot is "typing"
-  await ctx.replyWithChatAction("typing");
-
   try {
-    const result = await model.generateContent(prompt);
+    // Show "typing" status while Gemini thinks
+    await ctx.replyWithChatAction("typing");
+
+    const result = await model.generateContent(ctx.message.text);
     const response = await result.response;
     const text = response.text();
 
@@ -39,6 +28,19 @@ bot.on("message:text", async (ctx) => {
   }
 });
 
-// 4. Start the Bot
-console.log("Bot is running...");
-bot.start();
+// 3. Serve via Webhook (Optimized for Deno Deploy)
+const handleUpdate = webhookCallback(bot, "std/http");
+
+Deno.serve(async (req) => {
+  if (req.method === "POST") {
+    const url = new URL(req.url);
+    if (url.pathname.slice(1) === bot.token) {
+      try {
+        return await handleUpdate(req);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+  return new Response("Bot is running!");
+});
