@@ -9,7 +9,8 @@ const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
 // We use 'gemini-2.0-flash' as it's the stable standard for 2026 bots
 const bot = new Bot(TELEGRAM_TOKEN);
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+// Change from 2.0 to 1.5
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // 3. Bot Logic
 bot.command("start", (ctx) => 
