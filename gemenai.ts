@@ -1,49 +1,58 @@
-import { Bot, Context, session, SessionFlavor, webhookCallback } from "https://deno.land/x/grammy@v1.21.1/mod.ts";
+import { Bot, webhookCallback } from "https://deno.land/x/grammy@v1.21.1/mod.ts";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai@latest";
-import { DenoKVAdapter } from "https://deno.land/x/grammy_storages@v2.4.2/denokv/src/mod.ts";
-
-interface SessionData {
-  history: { role: "user" | "model"; parts: { text: string }[] }[];
-}
-type MyContext = Context & SessionFlavor<SessionData>;
 
 const TELEGRAM_TOKEN = Deno.env.get("TELEGRAM_TOKEN") || "";
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || "";
 
-const kv = await Deno.openKv();
-const bot = new Bot<MyContext>(TELEGRAM_TOKEN);
+const bot = new Bot(TELEGRAM_TOKEN);
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// Use 'gemini-1.5-flash' or 'gemini-2.0-flash'. 
-// If both 404, try 'gemini-pro' as a final fallback.
+// Use 1.5-flash as it is the most reliable for Free Tier in 2026
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-bot.use(session({
-  initial: () => ({ history: [] }),
-  storage: new DenoKVAdapter(kv),
-}));
+bot.command("start", (ctx) => 
+  ctx.reply("✨ **Gemini AI Bot is Online!**\nSend me a message to start chatting.", { parse_mode: "Markdown" })
+);
 
 bot.on("message:text", async (ctx) => {
   try {
     await ctx.replyWithChatAction("typing");
-    const chat = model.startChat({ history: ctx.session.history });
-    const result = await chat.sendMessage(ctx.message.text);
-    const aiText = result.response.text();
 
-    ctx.session.history.push({ role: "user", parts: [{ text: ctx.message.text }] });
-    ctx.session.history.push({ role: "model", parts: [{ text: aiText }] });
+    const result = await model.generateContent(ctx.message.text);
+    const response = await result.response;
+    const text = response.text();
 
-    if (ctx.session.history.length > 10) ctx.session.history.splice(0, 2);
+    try {
+      await ctx.reply(text, { parse_mode: "Markdown" });
+    } catch {
+      // Fallback if Gemini uses Markdown characters that Telegram doesn't like
+      await ctx.reply(text); 
+    }
 
-    await ctx.reply(aiText, { parse_mode: "Markdown" });
   } catch (error: any) {
     console.error("Gemini Error:", error);
-    if (error.status === 404) {
-      await ctx.reply("❌ **Setup Error:** The AI model ID in the code is incorrect. Check Deno logs for the correct name.");
+
+    // Specific fix for your 429 / Limit 0 error
+    if (error.message?.includes("429") || error.message?.includes("limit: 0")) {
+      await ctx.reply("🚫 **Quota Restricted:** Your API key has a limit of 0. \n\n**To fix this:**\n1. Go to [Google AI Studio](https://aistudio.google.com/)\n2. Ensure your project has 'Pay-as-you-go' enabled (it still has a free tier, but unlocks the limits).\n3. Check if your region supports Free Tier.");
     } else {
-      await ctx.reply("⚠️ Thinking is hard right now. Try /start.");
+      await ctx.reply("⚠️ I'm having trouble processing that right now.");
     }
   }
 });
 
-Deno.serve(webhookCallback(bot, "std/http"));
+const handleUpdate = webhookCallback(bot, "std/http");
+
+Deno.serve(async (req) => {
+  if (req.method === "POST") {
+    const url = new URL(req.url);
+    if (url.pathname.slice(1) === TELEGRAM_TOKEN) {
+      try {
+        return await handleUpdate(req);
+      } catch (err) {
+        console.error("Update Error:", err);
+      }
+    }
+  }
+  return new Response("Bot is running!");
+});
