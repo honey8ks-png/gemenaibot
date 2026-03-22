@@ -44,3 +44,23 @@ Deno.serve(async (req) => {
   }
   return new Response("Bot is running!");
 });
+bot.on("message:text", async (ctx) => {
+  try {
+    await ctx.replyWithChatAction("typing");
+
+    // Check if API key exists
+    if (!GEMINI_API_KEY) {
+      return await ctx.reply("System Error: GEMINI_API_KEY is missing in Deno settings.");
+    }
+
+    const result = await model.generateContent(ctx.message.text);
+    const response = await result.response;
+    const text = response.text();
+
+    await ctx.reply(text);
+  } catch (error) {
+    // This will tell you EXACTLY what Google is complaining about
+    console.error(error);
+    await ctx.reply(`DEBUG ERROR: ${error.message}`);
+  }
+});
