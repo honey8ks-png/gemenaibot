@@ -14,7 +14,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
  * Common IDs now: 'gemini-2.5-flash' or 'gemini-3-flash'
  */
 const model = genAI.getGenerativeModel({ 
-  model: "gemini-2.5-flash" 
+  model: "gemini-1.5-flash" 
 });
 
 bot.on("message:text", async (ctx) => {
